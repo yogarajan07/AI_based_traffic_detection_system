@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Traffic Signal Control</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+:root{--red:#ef4444;--yellow:#f59e0b;--green:#10b981}
+html,body{height:100%;margin:0;font-family:system-ui;background:linear-gradient(180deg,#061228,#071028);color:#e6f2ff}
+.wrap{display:grid;grid-template-columns:360px 1fr 360px;gap:18px;padding:18px;box-sizing:border-box;height:100vh}
+.panel{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border-radius:12px;padding:14px;box-shadow:0 12px 30px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.03)}
+h2{margin:0 0 6px 0}
+.muted{color:#9fb4c9;font-size:13px}
+.sim{background:linear-gradient(180deg,#07102a,#041124);border-radius:10px;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px;position:relative}
+.intersection{width:560px;height:560px;position:relative;background:linear-gradient(180deg,#081425,#08162b);border-radius:12px;box-shadow:inset 0 0 40px rgba(0,0,0,0.5);overflow:hidden}
+.road-horizontal{position:absolute;left:0;right:0;top:50%;height:120px;transform:translateY(-50%);background:#0e2a3d}
+.road-vertical{position:absolute;top:0;bottom:0;left:50%;width:120px;transform:translateX(-50%);background:#0e2a3d}
+.center-box{position:absolute;left:50%;top:50%;width:120px;height:120px;transform:translate(-50%,-50%);background:#05141d;border-radius:6px;box-shadow:inset 0 6px 20px rgba(0,0,0,0.6);z-index:5}
+.light-pole{position:absolute;width:36px;height:72px;display:flex;flex-direction:column;gap:6px;align-items:center;justify-content:center;z-index:10}
+.bulb{width:26px;height:26px;border-radius:50%;background:rgba(0,0,0,0.25);box-shadow:0 6px 12px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.04);transition:all .18s}
+.bulb.red.on{background:var(--red);box-shadow:0 6px 22px rgba(239,68,68,0.28)}
+.bulb.yellow.on{background:var(--yellow);box-shadow:0 6px 22px rgba(245,158,11,0.28)}
+.bulb.green.on{background:var(--green);box-shadow:0 6px 22px rgba(16,185,129,0.28)}
+.pole-n{left:50%;top:6%;transform:translateX(-50%)}
+.pole-s{left:50%;bottom:6%;transform:translateX(-50%)}
+.pole-w{left:6%;top:50%;transform:translateY(-50%);flex-direction:row;width:72px;height:36px}
+.pole-e{right:6%;top:50%;transform:translateY(-50%);flex-direction:row;width:72px;height:36px}
+.lane-box{position:absolute;color:#e6f2ff;font-weight:700;font-size:14px;text-align:center;width:120px;z-index:10}
+.lane-n{left:50%;top:2%;transform:translateX(-50%)}
+.lane-s{left:50%;bottom:2%;transform:translateX(-50%)}
+.lane-w{left:2%;top:50%;transform:translateY(-50%);width:100px}
+.lane-e{right:2%;top:50%;transform:translateY(-50%);width:100px}
+.timer-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#cfeff2;text-align:center;z-index:6}
+.vehicle{position:absolute;width:20px;height:32px;background:linear-gradient(135deg,#3b82f6,#2563eb);border-radius:4px;box-shadow:0 4px 8px rgba(0,0,0,0.4);z-index:3;display:flex;align-items:center;justify-content:center}
+.vehicle.horizontal{width:32px;height:20px}
+.vehicle::before{content:'';width:70%;height:70%;background:rgba(255,255,255,0.1);border-radius:2px}
+.control-row{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.btn-small{padding:6px 10px;font-size:13px;border-radius:8px}
+.counter{display:flex;gap:6px;align-items:center;background:rgba(255,255,255,0.02);padding:8px;border-radius:8px}
+.counter input{width:72px;text-align:center;background:transparent;border:none;color:inherit;font-weight:700;font-size:16px;outline:none}
+.log{height:200px;overflow:auto;background:rgba(255,255,255,0.02);padding:8px;border-radius:8px;font-size:13px}
+.mode-btn{padding:8px 16px;font-size:13px;border-radius:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#9fb4c9;cursor:pointer;transition:all 0.2s}
+.mode-btn.active{background:rgba(16,185,129,0.2);border-color:rgba(16,185,129,0.4);color:#10b981;font-weight:600}
+</style>
+</head>
+<body>
+<div style="padding:12px 18px">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+<div><h2>Traffic Signal Control</h2><div class="muted">Vehicle-based or Standard timed modes</div></div>
+<div style="display:flex;gap:8px">
+<button class="btn btn-sm btn-outline-light" onclick="resetSystem()">Reset</button>
+</div></div>
+<div class="wrap">
+<div class="panel">
+<div style="margin-bottom:10px"><strong>Mode Selection</strong></div>
+<div style="display:flex;gap:8px;margin-bottom:16px">
+<button class="mode-btn active" id="modeVehicle" onclick="setMode('vehicle')">🚗 Vehicle-Based</button>
+<button class="mode-btn" id="modeStandard" onclick="setMode('standard')">⏱️ Standard Timed</button>
+</div>
+<div id="modeDescription" style="padding:10px;background:rgba(16,185,129,0.1);border-radius:8px;margin-bottom:12px;font-size:13px">
+<strong>Vehicle-Based Mode:</strong><br>Green light stays until all vehicles clear.
+</div>
+<hr style="border-color:rgba(255,255,255,0.03)">
+<div style="margin-bottom:10px"><strong>Controls</strong></div>
+<div class="control-row">
+<button id="startBtn" class="btn btn-success btn-small" onclick="startSystem()">Start</button>
+<button id="pauseBtn" class="btn btn-warning btn-small" onclick="pauseSystem()" disabled>Pause</button>
+</div>
+<div class="control-row">
+<label class="muted">Yellow (s)</label>
+<input id="yellowTime" type="number" value="3" class="form-control form-control-sm" style="width:90px">
+<label class="muted">Release (s)</label>
+<input id="releaseRate" type="number" value="0.6" step="0.1" class="form-control form-control-sm" style="width:90px">
+</div>
+<div id="standardModeSettings" style="display:none">
+<div class="control-row">
+<label class="muted">Green Time (s)</label>
+<input id="greenTime" type="number" value="20" class="form-control form-control-sm" style="width:90px">
+</div>
+</div>
+<hr style="border-color:rgba(255,255,255,0.03)">
+<div style="margin-bottom:8px"><strong>Set vehicles per direction</strong></div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div><strong>North</strong></div>
+<div class="counter">
+<button class="btn btn-sm btn-outline-light" onclick="changeCount('N',-1)">-</button>
+<input id="countN" type="number" value="0">
+<button class="btn btn-sm btn-outline-light" onclick="changeCount('N',1)">+</button>
+</div></div>
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div><strong>East</strong></div>
+<div class="counter">
+<button class="btn btn-sm btn-outline-light" onclick="changeCount('E',-1)">-</button>
+<input id="countE" type="number" value="0">
+<button class="btn btn-sm btn-outline-light" onclick="changeCount('E',1)">+</button>
+</div></div>
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div><strong>South</strong></div>
+<div class="counter">
+<button class="btn btn-sm btn-outline-light" onclick="changeCount('S',-1)">-</button>
+<input id="countS" type="number" value="0">
+<button class="btn btn-sm btn-outline-light" onclick="changeCount('S',1)">+</button>
+</div></div>
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div><strong>West</strong></div>
+<div class="counter">
+<button class="btn btn-sm btn-outline-light" onclick="changeCount('W',-1)">-</button>
+<input id="countW" type="number" value="0">
+<button class="btn btn-sm btn-outline-light" onclick="changeCount('W',1)">+</button>
+</div></div>
+</div>
+<div style="height:12px"></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+<button class="btn btn-sm btn-outline-light" onclick="preset([8,3,5,2])">Test 1</button>
+<button class="btn btn-sm btn-outline-light" onclick="preset([15,8,12,6])">Test 2</button>
+<button class="btn btn-sm btn-outline-light" onclick="preset([54,32,68,21])">Heavy</button>
+</div>
+<div style="height:12px"></div>
+<div><strong>Logs</strong></div>
+<div class="log" id="logArea"></div>
+</div>
+<div class="sim panel">
+<div style="margin-bottom:12px;display:flex;justify-content:space-between;width:100%">
+<div><strong>4-way Junction</strong></div>
+<div><strong>State:</strong> <span id="stateLabel">Idle</span></div>
+</div>
+<div class="intersection" id="intersection">
+<div class="road-horizontal"></div>
+<div class="road-vertical"></div>
+<div class="center-box"></div>
+<div class="light-pole pole-n">
+<div style="display:flex;flex-direction:column;gap:6px">
+<div class="bulb red" id="N_red"></div>
+<div class="bulb yellow" id="N_yellow"></div>
+<div class="bulb green" id="N_green"></div>
+</div></div>
+<div class="light-pole pole-s">
+<div style="display:flex;flex-direction:column;gap:6px">
+<div class="bulb red" id="S_red"></div>
+<div class="bulb yellow" id="S_yellow"></div>
+<div class="bulb green" id="S_green"></div>
+</div></div>
+<div class="light-pole pole-w" style="align-items:flex-start">
+<div style="display:flex;flex-direction:row;gap:6px">
+<div class="bulb green" id="W_green"></div>
+<div class="bulb yellow" id="W_yellow"></div>
+<div class="bulb red" id="W_red"></div>
+</div></div>
+<div class="light-pole pole-e" style="align-items:flex-end">
+<div style="display:flex;flex-direction:row;gap:6px">
+<div class="bulb green" id="E_green"></div>
+<div class="bulb yellow" id="E_yellow"></div>
+<div class="bulb red" id="E_red"></div>
+</div></div>
+<div class="lane-box lane-n" id="laneN">N: 0</div>
+<div class="lane-box lane-s" id="laneS">S: 0</div>
+<div class="lane-box lane-w" id="laneW">W: 0</div>
+<div class="lane-box lane-e" id="laneE">E: 0</div>
+<div class="timer-center">
+<div class="muted">Serving</div>
+<div id="servingLabel" style="font-weight:800;font-size:22px">—</div>
+<div class="muted" style="margin-top:4px">Remaining</div>
+<div style="font-weight:800;font-size:20px" id="remainingVehicles">0</div>
+</div>
+</div>
+<div style="width:100%;display:flex;gap:8px;margin-top:12px">
+<div class="muted">Served:</div><div style="font-weight:700" id="served">0</div>
+<div style="flex:1"></div>
+<div class="muted">Moving:</div><div style="font-weight:700" id="movingCount">0</div>
+</div>
+</div>
+<div class="panel">
+<div style="margin-bottom:8px"><strong>System Status</strong></div>
+<div style="height:10px"></div>
+<div><strong>Queue</strong></div>
+<div class="muted" id="snapshot">N:0 • E:0 • S:0 • W:0</div>
+<div style="height:12px"></div>
+<div><strong>Events</strong></div>
+<div class="log" id="eventLog"></div>
+<div style="height:12px"></div>
+<div style="padding:10px;background:rgba(16,185,129,0.1);border-radius:8px">
+<div style="font-size:13px;line-height:1.6" id="helpText">
+<strong>🚦 Vehicle-Based:</strong><br>
+• Green for most vehicles<br>
+• Switches when cleared<br>
+• Zero wasted time
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+const state={mode:'vehicle',counts:{N:0,E:0,S:0,W:0},waitingCounts:{N:0,E:0,S:0,W:0},servedTotal:0,current:{lane:null,phase:'idle'},running:false,tickMs:50,lastTick:null,vehicles:[],nextVehicleId:0,vehicleSpeed:120,releaseInterval:0.6,yellow:3,lastReleaseTime:0,greenTime:20,greenElapsed:0,lastLaneInCycle:null};
+const ids=['N','E','S','W'];
+const dirs={N:['E','S','W'],E:['S','W','N'],S:['W','N','E'],W:['N','E','S']};
+function setMode(m){if(state.running){alert('Stop simulation first');return}state.mode=m;document.getElementById('modeVehicle').classList.toggle('active',m==='vehicle');document.getElementById('modeStandard').classList.toggle('active',m==='standard');document.getElementById('standardModeSettings').style.display=m==='standard'?'block':'none';const desc=document.getElementById('modeDescription');const help=document.getElementById('helpText');if(m==='vehicle'){desc.innerHTML='<strong>Vehicle-Based:</strong><br>Green stays until all clear.';help.innerHTML='<strong>🚦 Vehicle-Based:</strong><br>• Green for most vehicles<br>• Switches when cleared';}else{desc.innerHTML='<strong>Standard Timed:</strong><br>20s green, cycles N→E→S→W continuously.';help.innerHTML='<strong>⏱️ Standard Timed:</strong><br>• Cycle: N→E→S→W<br>• 20s green each<br>• Excess wait';}logEvent(`Mode: ${m}`);}
+function changeCount(lane,delta){state.counts[lane]=Math.max(0,(state.counts[lane]||0)+delta);if(!state.running){state.waitingCounts[lane]=state.counts[lane];}else{if(delta>0){state.waitingCounts[lane]+=delta;logEvent(`➕ Added ${delta} vehicle(s) to ${lane}`);}else if(delta<0&&state.waitingCounts[lane]>0){const removed=Math.min(Math.abs(delta),state.waitingCounts[lane]);state.waitingCounts[lane]-=removed;logEvent(`➖ Removed ${removed} vehicle(s) from ${lane}`);}}updateDisplays();}
+function preset(arr){state.counts.N=Math.max(0,arr[0]||0);state.counts.E=Math.max(0,arr[1]||0);state.counts.S=Math.max(0,arr[2]||0);state.counts.W=Math.max(0,arr[3]||0);if(!state.running){ids.forEach(id=>state.waitingCounts[id]=state.counts[id]);}else{ids.forEach((id,i)=>{const diff=state.counts[id]-state.waitingCounts[id];if(diff>0){state.waitingCounts[id]=state.counts[id];logEvent(`➕ Preset added ${diff} to ${id}`);}});}updateDisplays();logEvent('Preset applied');}
+function updateDisplays(){document.getElementById('laneN').innerText='N: '+state.waitingCounts.N;document.getElementById('laneE').innerText='E: '+state.waitingCounts.E;document.getElementById('laneS').innerText='S: '+state.waitingCounts.S;document.getElementById('laneW').innerText='W: '+state.waitingCounts.W;document.getElementById('countN').value=state.counts.N;document.getElementById('countE').value=state.counts.E;document.getElementById('countS').value=state.counts.S;document.getElementById('countW').value=state.counts.W;document.getElementById('snapshot').innerText=`N:${state.waitingCounts.N} • E:${state.waitingCounts.E} • S:${state.waitingCounts.S} • W:${state.waitingCounts.W}`;document.getElementById('remainingVehicles').innerText=state.current.lane?state.waitingCounts[state.current.lane]:'0';document.getElementById('movingCount').innerText=state.vehicles.length;}
+function logEvent(txt){const t=new Date().toLocaleTimeString();const e=document.createElement('div');e.innerHTML=`<strong>[${t}]</strong> ${txt}`;document.getElementById('eventLog').prepend(e);}
+function createVehicle(from,to){const v={id:state.nextVehicleId++,from,to,progress:0,element:null};const el=document.createElement('div');el.className=(from==='N'||from==='S')?'vehicle':'vehicle horizontal';const sp={N:{left:'50%',top:'80px',transform:'translateX(-50%)'},S:{left:'50%',bottom:'80px',transform:'translateX(-50%)'},E:{right:'80px',top:'50%',transform:'translateY(-50%)'},W:{left:'80px',top:'50%',transform:'translateY(-50%)'}};Object.assign(el.style,sp[from]);v.element=el;document.getElementById('intersection').appendChild(el);return v;}
+function updateVehiclePosition(v,dt){if(!v.element)return true;v.progress+=dt*state.vehicleSpeed;const el=v.element;const tp=v.progress-200;if(v.from==='N'){if(v.to==='S'){el.style.top=(80+v.progress)+'px';return v.progress>520}if(v.to==='E'){if(v.progress<200)el.style.top=(80+v.progress)+'px';else{el.className='vehicle horizontal';el.style.top='280px';el.style.left=(280+tp)+'px';el.style.transform='none';return tp>320}}if(v.to==='W'){if(v.progress<200)el.style.top=(80+v.progress)+'px';else{el.className='vehicle horizontal';el.style.top='240px';el.style.left='auto';el.style.right=(280+tp)+'px';el.style.transform='none';return tp>320}}}if(v.from==='S'){if(v.to==='N'){el.style.bottom=(80+v.progress)+'px';return v.progress>520}if(v.to==='W'){if(v.progress<200)el.style.bottom=(80+v.progress)+'px';else{el.className='vehicle horizontal';el.style.bottom='280px';el.style.right=(280+tp)+'px';el.style.transform='none';return tp>320}}if(v.to==='E'){if(v.progress<200)el.style.bottom=(80+v.progress)+'px';else{el.className='vehicle horizontal';el.style.bottom='240px';el.style.left=(280+tp)+'px';el.style.transform='none';return tp>320}}}if(v.from==='E'){if(v.to==='W'){el.style.right=(80+v.progress)+'px';return v.progress>520}if(v.to==='S'){if(v.progress<200)el.style.right=(80+v.progress)+'px';else{el.className='vehicle';el.style.right='280px';el.style.top=(280+tp)+'px';el.style.transform='none';return tp>320}}if(v.to==='N'){if(v.progress<200)el.style.right=(80+v.progress)+'px';else{el.className='vehicle';el.style.right='240px';el.style.bottom=(280+tp)+'px';el.style.top='auto';el.style.transform='none';return tp>320}}}if(v.from==='W'){if(v.to==='E'){el.style.left=(80+v.progress)+'px';return v.progress>520}if(v.to==='N'){if(v.progress<200)el.style.left=(80+v.progress)+'px';else{el.className='vehicle';el.style.left='280px';el.style.bottom=(280+tp)+'px';el.style.top='auto';el.style.transform='none';return tp>320}}if(v.to==='S'){if(v.progress<200)el.style.left=(80+v.progress)+'px';else{el.className='vehicle';el.style.left='240px';el.style.top=(280+tp)+'px';el.style.transform='none';return tp>320}}}return false;}
+function releaseVehicle(lane){if(state.waitingCounts[lane]<=0)return false;const to=dirs[lane][Math.floor(Math.random()*dirs[lane].length)];const v=createVehicle(lane,to);state.vehicles.push(v);state.waitingCounts[lane]--;state.servedTotal++;return true;}
+function pickNextLane(){if(state.mode==='standard'){const c=['N','E','S','W'];if(!state.lastLaneInCycle){state.lastLaneInCycle='N';return'N'}const ci=c.indexOf(state.lastLaneInCycle);const ni=(ci+1)%c.length;state.lastLaneInCycle=c[ni];return c[ni];}else{const ent=ids.map(id=>({id,v:state.waitingCounts[id]||0}));ent.sort((a,b)=>b.v-a.v);return ent[0].v===0?null:ent[0].id;}}
+function renderLights(){ids.forEach(b=>['red','yellow','green'].forEach(c=>document.getElementById(b+'_'+c).classList.remove('on')));if(state.current.phase==='green'){const l=state.current.lane;document.getElementById(l+'_green').classList.add('on');const opp={N:'S',S:'N',E:'W',W:'E'};document.getElementById(opp[l]+'_red').classList.add('on');ids.filter(x=>x!==l&&x!==opp[l]).forEach(o=>document.getElementById(o+'_red').classList.add('on'));}else if(state.current.phase==='yellow'){const l=state.current.lane;document.getElementById(l+'_yellow').classList.add('on');const o={N:'S',S:'N',E:'W',W:'E'}[l];document.getElementById(o+'_red').classList.add('on');ids.filter(x=>x!==l&&x!==o).forEach(o=>document.getElementById(o+'_red').classList.add('on'));}else{ids.forEach(o=>document.getElementById(o+'_red').classList.add('on'));}}
+function startGreen(ln){state.current.lane=ln;state.current.phase='green';state.greenElapsed=0;document.getElementById('stateLabel').innerText=`Green ${ln}`;logEvent(`🟢 GREEN ${ln} - ${state.waitingCounts[ln]} vehicles`);state.lastReleaseTime=Date.now();renderLights();}
+function enterYellow(){state.current.phase='yellow';state.current.yellowElapsed=0;document.getElementById('stateLabel').innerText=`Yellow ${state.current.lane}`;logEvent(`🟡 YELLOW ${state.current.lane}`);renderLights();}
+function endCurrent(){logEvent(`Finished ${state.current.lane}`);state.current.phase='idle';state.current.lane=null;state.greenElapsed=0;}
+let loopHandle=null;
+function tick(){const now=Date.now();if(!state.lastTick)state.lastTick=now;const dt=(now-state.lastTick)/1000;state.lastTick=now;if(!state.running)return;state.vehicles=state.vehicles.filter(v=>!updateVehiclePosition(v,dt));if(state.current.phase==='green'&&state.current.lane){state.greenElapsed+=dt;if(state.waitingCounts[state.current.lane]>0&&now-state.lastReleaseTime>state.releaseInterval*1000){releaseVehicle(state.current.lane);state.lastReleaseTime=now;updateDisplays();}if(state.mode==='vehicle'){if(state.waitingCounts[state.current.lane]===0){logEvent(`✓ Cleared ${state.current.lane}`);enterYellow();}}else{if(state.greenElapsed>=state.greenTime){const rem=state.waitingCounts[state.current.lane];if(rem>0)logEvent(`⏱️ Time up for ${state.current.lane}. ${rem} waiting`);else logEvent(`✓ Cleared ${state.current.lane}`);enterYellow();}}}if(state.current.phase==='idle'){const nx=pickNextLane();if(nx)startGreen(nx);else document.getElementById('stateLabel').innerText='Idle';}if(state.current.phase==='yellow'){state.current.yellowElapsed=(state.current.yellowElapsed||0)+dt;if(state.current.yellowElapsed>=state.yellow){endCurrent();}}document.getElementById('servingLabel').innerText=state.current.lane||'—';document.getElementById('served').innerText=state.servedTotal;updateDisplays();renderLights();}
+function startSystem(){if(state.running)return;ids.forEach(id=>state.waitingCounts[id]=state.counts[id]);state.yellow=Math.max(1,Number(document.getElementById('yellowTime').value)||3);state.releaseInterval=Math.max(0.1,Number(document.getElementById('releaseRate').value)||0.6);if(state.mode==='standard')state.greenTime=Math.max(1,Number(document.getElementById('greenTime').value)||20);state.running=true;state.lastTick=null;state.servedTotal=0;state.greenElapsed=0;loopHandle=setInterval(tick,state.tickMs);document.getElementById('startBtn').disabled=true;document.getElementById('pauseBtn').disabled=false;logEvent(`🚦 Started - ${state.mode} mode`);updateDisplays();}
+function pauseSystem(){if(!state.running)return;state.running=false;clearInterval(loopHandle);loopHandle=null;document.getElementById('startBtn').disabled=false;document.getElementById('pauseBtn').disabled=true;logEvent('Paused');}
+function resetSystem(){if(state.running){state.running=false;clearInterval(loopHandle);loopHandle=null;}state.counts={N:0,E:0,S:0,W:0};state.waitingCounts={N:0,E:0,S:0,W:0};state.servedTotal=0;state.current={lane:null,phase:'idle'};state.greenElapsed=0;state.lastLaneInCycle=null;state.vehicles.forEach(v=>{if(v.element)v.element.remove()});state.vehicles=[];document.getElementById('startBtn').disabled=false;document.getElementById('pauseBtn').disabled=true;updateDisplays();renderLights();logEvent('Reset');}
+updateDisplays();renderLights();logEvent('✓ Ready');
+</script>
+</body>
+</html>
